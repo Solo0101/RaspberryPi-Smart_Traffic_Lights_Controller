@@ -1,6 +1,6 @@
 #include "TrafficLightController.h"
 
-TrafficLightController::TrafficLightController(int nr, int ny, int ng, int sr, int sy, int sg, int er, int ey, int eg, int wr, int wy, int wg, int nTrig, int nEcho, int sTrig, int sEcho) {
+TrafficLightController::TrafficLightController(int nr, int ny, int ng, int sr, int sy, int sg, int er, int ey, int eg, int wr, int wy, int wg) {
   northRed = nr;
   northYellow = ny;
   northGreen = ng;
@@ -13,11 +13,6 @@ TrafficLightController::TrafficLightController(int nr, int ny, int ng, int sr, i
   westRed = wr;
   westYellow = wy;
   westGreen = wg;
-
-  northTrig = nTrig;
-  northEcho = nEcho;
-  southTrig = sTrig;
-  southEcho = sEcho;
 
   // Initialize all LED pins as outputs
   pinMode(northRed, OUTPUT);
@@ -33,23 +28,16 @@ TrafficLightController::TrafficLightController(int nr, int ny, int ng, int sr, i
   pinMode(westYellow, OUTPUT);
   pinMode(westGreen, OUTPUT);
 
-  // Initialize sensor pins
-  // pinMode(northTrig, OUTPUT);
-  // pinMode(northEcho, INPUT);
-  // pinMode(southTrig, OUTPUT);
-  // pinMode(southEcho, INPUT);
-  // distanceSensorNorth = new UltraSonicDistanceSensor(northTrig, northEcho);
-  // distanceSensorSouth = new UltraSonicDistanceSensor(southTrig, southEcho);
-
   // Start with north and south direction green, others red
-  setNorthSouthGreen();
-  currentState = NORTH_SOUTH_GREEN;
+  //setNorthSouthGreen();
+  //currentState = NORTH_SOUTH_GREEN;
+  setAllRed();
+  currentState = ALL_RED;
   //Serial.println("In constructor");
 }
 
 void TrafficLightController::defaultCycleWithDistanceSensor() {
-  //Serial.println(currentState);
-  // Check sensors and prioritize north/south if needed
+  
   if (checkNorthSensor() || checkSouthSensor()) {
     setNorthSouthGreen();
     currentState = NORTH_SOUTH_GREEN;
@@ -58,22 +46,22 @@ void TrafficLightController::defaultCycleWithDistanceSensor() {
     // Cycle through each direction normally
     switch (currentState) {
       case NORTH_SOUTH_GREEN:
+        setNorthSouthGreen();
+        delay(greenTime);
         setNorthSouthYellow();
         delay(yellowTime);
         setAllRed();
         delay(redTime);
-        setEastWestGreen();
         currentState = EAST_WEST_GREEN;
-        delay(greenTime);
         break;
       case EAST_WEST_GREEN:
+        setEastWestGreen();
+        delay(greenTime);
         setEastWestYellow();
         delay(yellowTime);
         setAllRed();
         delay(redTime);
-        setNorthSouthGreen();
         currentState = NORTH_SOUTH_GREEN;
-        delay(greenTime);
         break;
       case ALL_RED: 
         setAllRed();
@@ -81,51 +69,16 @@ void TrafficLightController::defaultCycleWithDistanceSensor() {
         currentState = NORTH_SOUTH_GREEN;
         break;
       default:
-        setAllRed();
         currentState = ALL_RED;
+        setAllRed();
         delay(redTime);
-        setNorthSouthGreen();
         currentState = NORTH_SOUTH_GREEN;
+        setNorthSouthGreen();
         delay(greenTime);
         break;
     }
     
   }
-
-  
-  // switch (currentState) {
-  //   //Serial.println((int)currentState);
-  //     case NORTH_SOUTH_GREEN:
-  //       setNorthSouthYellow();
-  //       //currentState = NORTH_SOUTH_YELLOW;
-  //       delay(yellowTime);
-  //       setAllRed();
-  //       //currentState = ALL_RED;
-  //       delay(redTime);
-  //       setEastWestGreen();
-  //       currentState = EAST_WEST_GREEN;
-  //       delay(greenTime);
-  //       break;
-  //     case EAST_WEST_GREEN:
-  //       setEastWestYellow();
-  //       //currentState = EAST_WEST_YELLOW;
-  //       delay(yellowTime);
-  //       setAllRed();
-  //       //currentState = ALL_RED;
-  //       delay(redTime);
-  //       setNorthSouthGreen();
-  //       currentState = NORTH_SOUTH_GREEN;
-  //       delay(greenTime);
-  //       break;
-  //     default:
-  //       setAllRed();
-  //       //currentState = ALL_RED;
-  //       delay(redTime);
-  //       setNorthSouthGreen();
-  //       currentState = NORTH_SOUTH_GREEN;
-  //       delay(greenTime);
-  //       break;
-  //   }
 }
 
 bool TrafficLightController::checkNorthSensor() {
@@ -149,6 +102,7 @@ void TrafficLightController::handleSerialCommand(String command) {
   } else if (command.equals("AllRed")) {
     setAllRed();
     delay(redTime);
+    currentState = ALL_RED;
   }
 }
 
