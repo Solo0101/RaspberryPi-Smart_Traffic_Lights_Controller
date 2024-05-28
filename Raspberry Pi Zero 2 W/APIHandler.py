@@ -77,6 +77,8 @@ class APIHandler:
             return True
         elif current_state == 'EastWest' and response_list == [True, False, True, False]:
             return True
+        elif current_state == None:
+            return True
         return False
 
     def run(self):

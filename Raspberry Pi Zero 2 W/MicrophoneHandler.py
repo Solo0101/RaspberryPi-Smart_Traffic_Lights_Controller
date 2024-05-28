@@ -59,9 +59,6 @@ class MicrophoneHandler:
             while True:
                 try:
                     data = np.frombuffer(self.stream.read(self.SAMPLES, exception_on_overflow=False), dtype=np.int16)
-                    current_state = self.read_current_state()
-                    if current_state:
-                        print("Current State from siren detection:", current_state)
 
                     if self.detect_siren(data):
                         with config.write_lock:
