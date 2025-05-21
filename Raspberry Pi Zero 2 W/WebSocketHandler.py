@@ -6,7 +6,7 @@ import time
 from SerialResponse import SerialResponse
 import config
 
-class WebSocketAPIHandler:
+class WebSocketHandler:
     def __init__(self, ws_url, serial_device_path="/dev/ttyACM0"):
         self.ws_url = ws_url
         self.serial_parser = SerialResponse(serial_port=serial_device_path)
