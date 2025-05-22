@@ -5,62 +5,64 @@
 #include <HCSR04.h>
 
 class TrafficLightController {
+public:
+  TrafficLightController(int nr, int ny, int ng, int sr, int sy, int sg, int er, int ey, int eg, int wr, int wy, int wg);
 
-  public:
-    // Constructor to initialize the pin values
-    TrafficLightController(int nr, int ny, int ng, int sr, int sy, int sg, int er, int ey, int eg, int wr, int wy, int wg);
+  void update();
+  void reportStatus();
+  void handleSerialCommand(String command);
 
-    void defaultCycleWithDistanceSensor();
+  enum State {
+    NORTH_SOUTH_GREEN,
+    NORTH_SOUTH_YELLOW,
+    EAST_WEST_GREEN,
+    EAST_WEST_YELLOW,
+    ALL_RED
+  };
 
-    // Enumeration for states
-    enum State {
-      NORTH_SOUTH_GREEN,
-      NORTH_SOUTH_YELLOW,
-      EAST_WEST_GREEN,
-      EAST_WEST_YELLOW,
-      ALL_RED
-    };
+private:
+  // Pin configuration
+  int northRed, northYellow, northGreen;
+  int southRed, southYellow, southGreen;
+  int eastRed, eastYellow, eastGreen;
+  int westRed, westYellow, westGreen;
 
-    // Current state variable
-    State currentState;
+  // FSM state
+  State currentState;
+  unsigned long lastStateChange = 0;
+  unsigned long lastReportTime = 0;
 
-    UltraSonicDistanceSensor *distanceSensorNorth = new UltraSonicDistanceSensor(15, 14);
-    UltraSonicDistanceSensor *distanceSensorSouth = new UltraSonicDistanceSensor(17, 16);
+  // Phase durations (ms)
+  const unsigned long allRedTimeout = 10000;
+  unsigned long northSouthGreenTime = 5000;
+  unsigned long northSouthYellowTime = 3000;
+  unsigned long eastWestGreenTime = 5000;
+  unsigned long eastWestYellowTime = 3000;
 
-    bool checkNorthSensor();
+  // Pending duration adjustments
+  bool nsIncrease = false;
+  bool nsDecrease = false;
+  bool ewIncrease = false;
+  bool ewDecrease = false;
 
-    bool checkSouthSensor();
+  UltraSonicDistanceSensor* distanceSensorNorth = new UltraSonicDistanceSensor(15, 14);
+  UltraSonicDistanceSensor* distanceSensorSouth = new UltraSonicDistanceSensor(17, 16);
+  const unsigned int distanceThreshold = 5;
 
-    // Handle Serial Commands, Only accepted commands are:
-    // "NorthSouth" -> North/South green, East/West red
-    // "EastWest" -> East/West green, North/South red
-    void handleSerialCommand(String command);
+  bool priorityRequested = false;
+  bool inPriorityTransition = false;
 
-  private:
-    // Pin definitions for traffic lights
-    int northRed, northYellow, northGreen;
-    int southRed, southYellow, southGreen;
-    int eastRed, eastYellow, eastGreen;
-    int westRed, westYellow, westGreen;
+  bool checkNorthSensor();
+  bool checkSouthSensor();
 
-    // Timing constants
-    const int redTime = 5000;      // Time for red light (5 seconds)
-    const int yellowTime = 2000;   // Time for yellow light (2 seconds)
-    const int greenTime = 5000;    // Time for green light (5 seconds)
+  void transitionTo(State nextState);
 
-    // Distance threshold
-    const int distanceThreshold = 5; // Threshold distance in cm
-
-    void setNorthSouthGreen();
-
-    void setNorthSouthYellow();
-
-    void setEastWestGreen();
-
-    void setEastWestYellow();
-
-    void setAllRed();
+  // LED control helpers
+  void setNorthSouthGreen();
+  void setNorthSouthYellow();
+  void setEastWestGreen();
+  void setEastWestYellow();
+  void setAllRed();
 };
-
 
 #endif
