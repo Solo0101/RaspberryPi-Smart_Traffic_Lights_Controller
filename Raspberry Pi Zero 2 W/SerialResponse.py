@@ -7,7 +7,7 @@ logging.basicConfig(
 )
 
 class SerialResponse:
-    def __init__(self, serial_port="/dev/ttyACM0", baud_rate=9600):
+    def __init__(self, serial_port: str = "/dev/ttyACM0", baud_rate: int = 9600):
         try:
             self.ser = serial.Serial(
                 port=serial_port,

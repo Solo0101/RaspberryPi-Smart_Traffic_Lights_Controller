@@ -8,10 +8,9 @@ import config
 from constants import ARDUINO_COMMANDS
 
 class WebSocketHandler:
-    def __init__(self, ws_url, serial_device_path="/dev/ttyACM0"):
+    def __init__(self, ws_url: str, serial_parser: SerialResponse):
         self.ws_url = ws_url
-        self.serial_parser = SerialResponse(serial_port=serial_device_path)
-        self.send_queue = asyncio.Queue()
+        self.serial_parser = serial_parser
         self.read_interval = 1.0 # Read serial state every 1s
         self.reconnect_interval = 5.0 # Reconnect to websocket every 5s
         logging.info(f"[WebSocketHandler] Initialized for {ws_url}")
@@ -37,6 +36,11 @@ class WebSocketHandler:
                 command = command_data.get("action")
 
                 if command in ARDUINO_COMMANDS:
+                    with config.emergency_lock:
+                        if config.emergency_active:
+                            logging.info(f"[WS] Skipped backend command '{command}' due to emergency.")
+                            continue
+                    
                     with config.write_lock:
                         self.serial_parser.write_command(command)
                 elif command:

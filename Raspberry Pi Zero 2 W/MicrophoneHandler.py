@@ -1,9 +1,10 @@
 import numpy as np
 import pyaudio
 from scipy.fft import fft
-import serial
 import time
+import logging
 
+from SerialResponse import SerialResponse
 import config
 
 class MicrophoneHandler:
@@ -12,61 +13,69 @@ class MicrophoneHandler:
     BUFFER_SIZE = 128
     THRESHOLD = 20000
 
-    def __init__(self, serial_device, device_index):
+    def __init__(self, serial_parser: SerialResponse, device_index: int):
+        self.serial_parser = serial_parser
         self.device_index = device_index
-        self.ser = serial_device
         self.p = self.initialize_audio()
         self.stream = self.open_audio_stream()
 
     def initialize_audio(self):
-        p = pyaudio.PyAudio()
-        return p
+        return pyaudio.PyAudio()
 
     def open_audio_stream(self):
-        stream = self.p.open(format=pyaudio.paInt16,
-                             channels=1,
-                             rate=self.SAMPLE_RATE,
-                             input=True,
-                             frames_per_buffer=self.BUFFER_SIZE,
-                             input_device_index=self.device_index)
-        return stream
-
-    def read_current_state(self):
-        if self.ser.in_waiting > 0:
-            with config.read_lock:
-                state = self.ser.readline().decode('utf-8').strip()
-                return state
-        return None
+        return self.p.open(format=pyaudio.paInt16,
+                           channels=1,
+                           rate=self.SAMPLE_RATE,
+                           input=True,
+                           frames_per_buffer=self.BUFFER_SIZE,
+                           input_device_index=self.device_index)
 
     def detect_siren(self, data):
         vReal = np.array(data, dtype=np.float32)
         fft_data = fft(vReal)
         magnitudes = np.abs(fft_data)
 
-        freqs = np.fft.fftfreq(self.SAMPLES, 1/self.SAMPLE_RATE)
-        siren_detected = False
-
+        freqs = np.fft.fftfreq(self.SAMPLES, 1 / self.SAMPLE_RATE)
         for i in range(self.SAMPLES // 2):
             frequency = freqs[i]
             if 600 <= frequency <= 2000 and magnitudes[i] > self.THRESHOLD:
-                siren_detected = True
-                break
-
-        return siren_detected
+                return True
+        return False
 
     def run(self):
+        emergency_start_time = None
+        allred_sent = False
+
         try:
             while True:
+                current_time = time.monotonic()
+
                 try:
                     data = np.frombuffer(self.stream.read(self.SAMPLES, exception_on_overflow=False), dtype=np.int16)
 
+                    # Check for emergency mode timeout
+                    with config.emergency_lock:
+                        if config.emergency_active:
+                            if emergency_start_time and current_time - emergency_start_time > 10:
+                                config.emergency_active = False
+                                logging.info("[MIC] Emergency cleared.")
+                                emergency_start_time = None
+                                allred_sent = False
+                            continue  # Skip detection during emergency
+
                     if self.detect_siren(data):
-                        with config.write_lock:
-                            print("Siren detected")
-                            self.ser.write(b"AllRed\n")
-                            time.sleep(3)
+                        with config.emergency_lock:
+                            config.emergency_active = True
+                            emergency_start_time = current_time
+
+                        if not allred_sent:
+                            with config.write_lock:
+                                logging.info("[MIC] Siren detected. Sending AllRed.")
+                                self.serial_parser.write_command("AllRed")
+                                allred_sent = True
+
                 except IOError as e:
-                    print(f"Error recording: {e}")
+                    logging.error(f"[MIC] Audio error: {e}")
         except KeyboardInterrupt:
             pass
         finally:

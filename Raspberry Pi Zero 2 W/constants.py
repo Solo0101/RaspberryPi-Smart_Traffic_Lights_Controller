@@ -1,1 +1,1 @@
-ARDUINO_COMMANDS = ("Increase", "Decrease", "AllRed", "Resume")
+ARDUINO_COMMANDS = ("IncreaseNS", "DecreaseNS", "IncreaseEW", "DecreaseEW", "AllRed", "Resume")

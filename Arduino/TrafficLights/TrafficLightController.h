@@ -31,26 +31,35 @@ private:
   State currentState;
   unsigned long lastStateChange = 0;
   unsigned long lastReportTime = 0;
+  unsigned long allRedStartTime = 0;
+  
+  const unsigned long reporTimeInterval = 1000;
+  const unsigned long milisecondsInSecond = 1000;
+  const unsigned long allRedTimeout = 10000;
 
   // Phase durations (ms)
-  const unsigned long allRedTimeout = 10000;
   unsigned long northSouthGreenTime = 5000;
   unsigned long northSouthYellowTime = 3000;
   unsigned long eastWestGreenTime = 5000;
   unsigned long eastWestYellowTime = 3000;
+
 
   // Pending duration adjustments
   bool nsIncrease = false;
   bool nsDecrease = false;
   bool ewIncrease = false;
   bool ewDecrease = false;
+  bool nsAdjusted = false;
+  bool ewAdjusted = false;
+
+
+  // Tramway management
+  bool emergencyActive = false;
+  bool sensorHoldActive = false;
 
   UltraSonicDistanceSensor* distanceSensorNorth = new UltraSonicDistanceSensor(15, 14);
   UltraSonicDistanceSensor* distanceSensorSouth = new UltraSonicDistanceSensor(17, 16);
   const unsigned int distanceThreshold = 5;
-
-  bool priorityRequested = false;
-  bool inPriorityTransition = false;
 
   bool checkNorthSensor();
   bool checkSouthSensor();

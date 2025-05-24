@@ -1,21 +1,18 @@
 from MicrophoneHandler import MicrophoneHandler
 from APIHandler import APIHandler
 from WebSocketHandler import WebSocketHandler
+from SerialResponse import SerialResponse
 import utilities
 
 import threading
 
-get_url = 'http://192.168.223.190:8000/traffic_light/get'
-post_url = 'http://192.168.223.190:8000/traffic_light/post'
+# Replace with actual websocket URL
+ws_url = 'ws://192.168.223.190:8765'
 
-ser = utilities.initialize_serial(serial_port='/dev/ttyACM0', baud_rate=9600)
+serial_parser = SerialResponse(serial_port="/dev/ttyACM0", baud_rate=9600)
 
-api_handler = APIHandler(get_url=get_url, post_url=post_url, serial_device=ser)
-
-# Use this once WebSockets work
-# api_handler = WebSocketAPIHandler(ws_url="ws://192.168.223.190:8765/ws/traffic", serial_device_path="/dev/ttyACM0")
-
-microphone_handler = MicrophoneHandler(serial_device=ser, device_index=1)
+api_handler = WebSocketHandler(ws_url=ws_url, serial_parser=serial_parser)
+microphone_handler = MicrophoneHandler(serial_parser=serial_parser, device_index=1)
 
 video_stream_command = "libcamera-vid --framerate 15 -t 0 --inline --listen -o tcp://0.0.0.0:8888"
 

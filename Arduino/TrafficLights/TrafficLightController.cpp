@@ -34,82 +34,82 @@ TrafficLightController::TrafficLightController(int nr, int ny, int ng, int sr, i
 void TrafficLightController::update() {
   unsigned long now = millis();
 
-  // Trigger a priority request if sensors detect vehicles
-  if (!inPriorityTransition && (checkNorthSensor() || checkSouthSensor())) {
-    if (currentState != NORTH_SOUTH_GREEN && currentState != NORTH_SOUTH_YELLOW && currentState != ALL_RED) {
-      priorityRequested = true;
-    }
+  // Update sensor hold status
+  if (!emergencyActive) {
+    sensorHoldActive = (checkNorthSensor() || checkSouthSensor());
+  } else {
+    sensorHoldActive = false;
   }
 
   switch (currentState) {
+
     case NORTH_SOUTH_GREEN:
+      if (emergencyActive) {
+        Serial.println("[FSM] Emergency detected -> switching to ALL_RED.");
+        transitionTo(ALL_RED);
+        break;
+      }
+
+      if (sensorHoldActive) {
+        // Stay in NORTH_SOUTH_GREEN while vehicle detected
+        break;
+      }
+
       if (now - lastStateChange >= northSouthGreenTime) {
-        if (nsIncrease) {
-          northSouthGreenTime = min(northSouthGreenTime + 1000, 60000);
-          nsIncrease = false;
-        }
-        if (nsDecrease) {
-          northSouthGreenTime = max(northSouthGreenTime - 1000, 10000);
-          nsDecrease = false;
-        }
+        nsAdjusted = false;  // Reset adjustment flag for next cycle
+        ewAdjusted = false;
         transitionTo(NORTH_SOUTH_YELLOW);
       }
       break;
 
     case NORTH_SOUTH_YELLOW:
       if (now - lastStateChange >= northSouthYellowTime) {
-        if (priorityRequested) {
-          inPriorityTransition = true;
-          priorityRequested = false;
-          transitionTo(ALL_RED);
-        } else {
-          transitionTo(EAST_WEST_GREEN);
-        }
+        nsAdjusted = false;
+        ewAdjusted = false;
+        transitionTo(EAST_WEST_GREEN);
       }
       break;
 
     case EAST_WEST_GREEN:
+      if (emergencyActive) {
+        Serial.println("[FSM] Emergency detected -> switching to ALL_RED.");
+        transitionTo(ALL_RED);
+        break;
+      }
+
       if (now - lastStateChange >= eastWestGreenTime) {
-        if (ewIncrease) {
-          eastWestGreenTime = min(eastWestGreenTime + 1000, 60000);
-          ewIncrease = false;
-        }
-        if (ewDecrease) {
-          eastWestGreenTime = max(eastWestGreenTime - 1000, 10000);
-          ewDecrease = false;
-        }
+        nsAdjusted = false;
+        ewAdjusted = false;  // Reset adjustment flag for next cycle
         transitionTo(EAST_WEST_YELLOW);
       }
       break;
 
     case EAST_WEST_YELLOW:
       if (now - lastStateChange >= eastWestYellowTime) {
-        if (priorityRequested) {
-          inPriorityTransition = true;
-          priorityRequested = false;
-          transitionTo(ALL_RED);
-        } else {
-          transitionTo(NORTH_SOUTH_GREEN);
-        }
+        nsAdjusted = false;
+        ewAdjusted = false;
+        transitionTo(NORTH_SOUTH_GREEN);
       }
       break;
 
     case ALL_RED:
-      if (inPriorityTransition && now - lastStateChange >= 3000) {
-        inPriorityTransition = false;
-        Serial.println("Priority transition complete. Resuming to NORTH_SOUTH_GREEN.");
-        transitionTo(NORTH_SOUTH_GREEN);
-      } else if (!inPriorityTransition && now - lastStateChange >= allRedTimeout) {
-        Serial.println("Timeout reached in ALL_RED. Resuming to NORTH_SOUTH_GREEN.");
-        transitionTo(NORTH_SOUTH_GREEN);
+      if (now - allRedStartTime >= allRedTimeout) {
+        if (emergencyActive) {
+          emergencyActive = false;
+          Serial.println("[FSM] Emergency timeout expired. Resuming to NS_GREEN.");
+          nsAdjusted = false;
+          ewAdjusted = false;
+          transitionTo(NORTH_SOUTH_GREEN);
+        }
       }
       break;
   }
 }
 
+
 void TrafficLightController::reportStatus() {
   unsigned long now = millis();
-  if (now - lastReportTime >= 1000) {
+  if (now - lastReportTime >= reporTimeInterval) {
     lastReportTime = now;
     String report = "STATE:";
     switch (currentState) {
@@ -119,10 +119,10 @@ void TrafficLightController::reportStatus() {
       case EAST_WEST_YELLOW: report += "EAST_WEST_YELLOW"; break;
       case ALL_RED: report += "ALL_RED"; break;
     }
-    report += ",NSG:" + String(northSouthGreenTime / 1000);
-    report += ",NSY:" + String(northSouthYellowTime / 1000);
-    report += ",EWG:" + String(eastWestGreenTime / 1000);
-    report += ",EWY:" + String(eastWestYellowTime / 1000);
+    report += ",NSG:" + String(northSouthGreenTime / milisecondsInSecond);
+    report += ",NSY:" + String(northSouthYellowTime / milisecondsInSecond);
+    report += ",EWG:" + String(eastWestGreenTime / milisecondsInSecond);
+    report += ",EWY:" + String(eastWestYellowTime / milisecondsInSecond);
     Serial.println(report);
   }
 }
@@ -130,30 +130,49 @@ void TrafficLightController::reportStatus() {
 void TrafficLightController::handleSerialCommand(String command) {
   command.trim();
 
-  if (inPriorityTransition) {
-    Serial.println("In priority transition. Command ignored.");
-    return;
+  if (command == "AllRed") {
+    if (!emergencyActive) {
+      emergencyActive = true;
+      Serial.println("[FSM] Emergency mode activated -> switching to ALL_RED.");
+      transitionTo(ALL_RED);
+      allRedStartTime = millis();  // Start timeout tracking
+    } else {
+      Serial.println("[FSM] Emergency already active. Ignoring redundant AllRed.");
+    }
   }
 
-  if (command == "Increase") {
-    if (currentState == NORTH_SOUTH_GREEN)
-      nsIncrease = true;
-    else if (currentState == EAST_WEST_GREEN) 
-      ewIncrease = true;
-  } else if (command == "Decrease") {
-      if (currentState == NORTH_SOUTH_GREEN) 
-        nsDecrease = true;
-      else if (currentState == EAST_WEST_GREEN) 
-        ewDecrease = true;
-  } else if (command == "AllRed") {
-    transitionTo(ALL_RED);
-  } else if (command == "Resume") {
-      if (currentState == ALL_RED && !inPriorityTransition) {
-        Serial.println("Received 'Resume'. Returning to NORTH_SOUTH_GREEN.");
-        transitionTo(NORTH_SOUTH_GREEN);
-      } else {
-        Serial.println("Cannot resume: either not in ALL_RED or in priority transition.");
+  else if (command == "Resume") {
+    if (emergencyActive && currentState == ALL_RED) {
+      emergencyActive = false;
+      Serial.println("[FSM] Emergency cleared. Resuming to NORTH_SOUTH_GREEN.");
+      transitionTo(NORTH_SOUTH_GREEN);
+    } else {
+      Serial.println("[FSM] Resume ignored.");
     }
+  }
+
+  else if (currentState != ALL_RED && !sensorHoldActive) {
+    if (command == "IncreaseNS" && !nsAdjusted) {
+      northSouthGreenTime = min(northSouthGreenTime + 1000, 60000);
+      nsAdjusted = true;
+      Serial.println("[FSM] Increased NS_GREEN duration.");
+    } else if (command == "DecreaseNS" && !nsAdjusted) {
+      northSouthGreenTime = max(northSouthGreenTime - 1000, 10000);
+      nsAdjusted = true;
+      Serial.println("[FSM] Decreased NS_GREEN duration.");
+    } else if (command == "IncreaseEW" && !ewAdjusted) {
+      eastWestGreenTime = min(eastWestGreenTime + 1000, 60000);
+      ewAdjusted = true;
+      Serial.println("[FSM] Increased EW_GREEN duration.");
+    } else if (command == "DecreaseEW" && !ewAdjusted) {
+      eastWestGreenTime = max(eastWestGreenTime - 1000, 10000);
+      ewAdjusted = true;
+      Serial.println("[FSM] Decreased EW_GREEN duration.");
+    } else {
+      Serial.println("[FSM] Adjustment ignored (already applied).");
+    }
+  } else {
+    Serial.println("[FSM] Adjustment command ignored: in ALL_RED or sensor holding.");
   }
 }
 
