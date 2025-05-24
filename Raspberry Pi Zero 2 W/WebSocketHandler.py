@@ -6,6 +6,7 @@ import time
 from SerialResponse import SerialResponse
 import config
 from constants import ARDUINO_COMMANDS
+import base64
 
 class WebSocketHandler:
     def __init__(self, ws_url: str, serial_parser: SerialResponse):
@@ -13,6 +14,14 @@ class WebSocketHandler:
         self.serial_parser = serial_parser
         self.read_interval = 1.0 # Read serial state every 1s
         self.reconnect_interval = 5.0 # Reconnect to websocket every 5s
+        self.username = "dani"
+        self.password = "vdani"
+        credentials = f"{self.username}:{self.password}"
+        encoded_credentials = base64.b64encode(credentials.encode()).decode()
+
+        self.headers = {
+        "Authorization": f"Basic {encoded_credentials}"
+        }
         logging.info(f"[WebSocketHandler] Initialized for {ws_url}")
 
     async def reader_task(self, websocket):
@@ -52,7 +61,7 @@ class WebSocketHandler:
         while True:
             try:
                 logging.info(f"[WS] Connecting to {self.ws_url}...")
-                async with websockets.connect(self.ws_url) as websocket:
+                async with websockets.connect(self.ws_url, additional_headers=self.headers) as websocket:
                     logging.info("[WS] Connected to backend.")
                     await asyncio.gather(
                         self.reader_task(websocket),
