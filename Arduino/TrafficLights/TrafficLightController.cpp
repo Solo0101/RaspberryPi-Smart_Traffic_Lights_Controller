@@ -151,6 +151,48 @@ void TrafficLightController::handleSerialCommand(String command) {
     }
   }
 
+  else if (command == "JumpNSG") {
+    if (currentState == NORTH_SOUTH_GREEN) {
+      Serial.println("[FSM] JumpNSG command ignored, already in NORTH_SOUTH_GREEN state");
+    } else {
+      emergencyActive = false;
+      nsAdjusted = false;
+      ewAdjusted = false;
+      Serial.println("[FSM] Jumping to NORTH_SOUTH_GREEN.");
+      transitionTo(NORTH_SOUTH_GREEN);
+    }
+  } else if (command == "JumpNSY") {
+    if (currentState == NORTH_SOUTH_YELLOW) {
+      Serial.println("[FSM] JumpNSY command ignored, already in NORTH_SOUTH_YELLOW state");
+    } else {
+      emergencyActive = false;
+      nsAdjusted = false;
+      ewAdjusted = false;
+      Serial.println("[FSM] Jumping to NORTH_SOUTH_YELLOW.");
+      transitionTo(NORTH_SOUTH_YELLOW);
+    }
+  } else if (command == "JumpEWG") {
+    if (currentState == EAST_WEST_GREEN) {
+      Serial.println("[FSM] JumpEWG command ignored, already in EAST_WEST_GREEN state");
+    } else {
+      emergencyActive = false;
+      nsAdjusted = false;
+      ewAdjusted = false;
+      Serial.println("[FSM] Jumping to EAST_WEST_GREEN.");
+      transitionTo(EAST_WEST_GREEN);
+    }
+  } else if (command == "JumpEWY") {
+    if (currentState == EAST_WEST_YELLOW) {
+      Serial.println("[FSM] JumpEWY command ignored, already in EAST_WEST_YELLOW state");
+    } else {
+      emergencyActive = false;
+      nsAdjusted = false;
+      ewAdjusted = false;
+      Serial.println("[FSM] Jumping to EAST_WEST_YELLOW.");
+      transitionTo(EAST_WEST_YELLOW);
+    }
+  }
+
   else if (currentState != ALL_RED && !sensorHoldActive) {
     if (command == "IncreaseNS" && !nsAdjusted) {
       northSouthGreenTime = min(northSouthGreenTime + 1000, 60000);
