@@ -14,6 +14,7 @@ class WebSocketHandler:
         self.serial_parser = serial_parser
         self.read_interval = 1.0 # Read serial state every 1s
         self.reconnect_interval = 5.0 # Reconnect to websocket every 5s
+        self.last_sent_state = None
         self.username = "dani"
         self.password = "vdani"
         credentials = f"{self.username}:{self.password}"
@@ -25,16 +26,24 @@ class WebSocketHandler:
         logging.info(f"[WebSocketHandler] Initialized for {ws_url}")
 
     async def reader_task(self, websocket):
+        self.last_sent_state = None
+
         while True:
             try:
                 state = self.serial_parser.read_and_parse_state()
                 if state:
-                    message = json.dumps(state)
-                    await websocket.send(message)
-                    logging.info(f"[WS] Sent state: {message}")
+                    state_str = json.dumps(state, sort_keys=True)
+
+                    if state_str != self.last_sent_state:
+                        await websocket.send(state_str)
+                        self.last_sent_state = state_str
+                        logging.info(f"[WS] Sent updated state: {state_str}")
+                    else:
+                        logging.debug("[WS] Skipped sending unchanged state.")
             except Exception as e:
-                logging.warning(f"[Reader] Serial or send error: {e}")
-            await asyncio.sleep(self.read_interval)
+                logging.warning(f"[Reader] Serial read/send error: {e}")
+
+            await asyncio.sleep(0.1)  # check frequently but only send if needed
 
     async def responder_task(self, websocket):
         while True:
