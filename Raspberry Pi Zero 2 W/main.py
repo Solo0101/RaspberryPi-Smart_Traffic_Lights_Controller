@@ -7,7 +7,7 @@ import utilities
 import threading
 
 # Replace with actual websocket URL
-ws_url = 'ws://192.168.223.190:8765'
+ws_url = 'ws://smart-intersection.go.ro:80/ws/pi_comms'
 
 serial_parser = SerialResponse(serial_port="/dev/ttyACM0", baud_rate=9600)
 
