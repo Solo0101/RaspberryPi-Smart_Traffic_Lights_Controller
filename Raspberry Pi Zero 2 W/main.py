@@ -11,7 +11,7 @@ ws_url = 'ws://smart-intersection.go.ro:80/ws/pi_comms'
 serial_parser = SerialResponse(serial_port="/dev/ttyACM0", baud_rate=9600)
 
 api_handler = WebSocketHandler(ws_url=ws_url, serial_parser=serial_parser)
-microphone_handler = MicrophoneHandler(serial_parser=serial_parser, device_index=1)
+microphone_handler = MicrophoneHandler(serial_parser=serial_parser, device_name="hw:0,0")
 
 video_stream_command = "libcamera-vid --framerate 15 -t 0 --inline --listen -o tcp://0.0.0.0:8888"
 

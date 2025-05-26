@@ -1,46 +1,50 @@
 import numpy as np
-import pyaudio
-from scipy.fft import fft
+import alsaaudio
 import time
 import logging
 
 from SerialResponse import SerialResponse
 import config
+from constants import SIREN_SIGNATURE_FREQS, FREQ_TOLERANCE, MAG_THRESHOLD, ARDUINO_ALL_RED_TIMEOUT
 
 class MicrophoneHandler:
-    SAMPLE_RATE = 16000
-    SAMPLES = 128
-    BUFFER_SIZE = 128
-    THRESHOLD = 20000
+    SAMPLE_RATE = 44100
+    SAMPLES = 2048
+    CHANNELS = 1
+    FORMAT = alsaaudio.PCM_FORMAT_S16_LE
+    PERIOD_SIZE = 1024  # smaller chunks are okay when buffering manually
 
-    def __init__(self, serial_parser: SerialResponse, device_index: int):
+    def __init__(self, serial_parser: SerialResponse, device_name: str = "default"):
         self.serial_parser = serial_parser
-        self.device_index = device_index
-        self.p = self.initialize_audio()
-        self.stream = self.open_audio_stream()
+        self.device_name = device_name
+        self.pcm = self.initialize_audio()
+        self.audio_buffer = np.array([], dtype=np.int16)
 
     def initialize_audio(self):
-        return pyaudio.PyAudio()
-
-    def open_audio_stream(self):
-        return self.p.open(format=pyaudio.paInt16,
-                           channels=1,
-                           rate=self.SAMPLE_RATE,
-                           input=True,
-                           frames_per_buffer=self.BUFFER_SIZE,
-                           input_device_index=self.device_index)
+        pcm = alsaaudio.PCM(type=alsaaudio.PCM_CAPTURE,
+                            mode=alsaaudio.PCM_NONBLOCK,
+                            channels=self.CHANNELS,
+                            rate=self.SAMPLE_RATE,
+                            format=self.FORMAT,
+                            periodsize=self.PERIOD_SIZE,
+                            device=self.device_name)
+        return pcm
 
     def detect_siren(self, data):
         vReal = np.array(data, dtype=np.float32)
-        fft_data = fft(vReal)
-        magnitudes = np.abs(fft_data)
+        vReal *= np.hamming(len(vReal))
 
-        freqs = np.fft.fftfreq(self.SAMPLES, 1 / self.SAMPLE_RATE)
-        for i in range(self.SAMPLES // 2):
-            frequency = freqs[i]
-            if 600 <= frequency <= 2000 and magnitudes[i] > self.THRESHOLD:
-                return True
-        return False
+        fft_data = np.abs(np.fft.rfft(vReal))
+        freqs = np.fft.rfftfreq(len(vReal), 1 / self.SAMPLE_RATE)
+
+        matched_peaks = 0
+        for target_freq in SIREN_SIGNATURE_FREQS:
+            band = (freqs >= target_freq - FREQ_TOLERANCE) & (freqs <= target_freq + FREQ_TOLERANCE)
+            peak_found = np.any(fft_data[band] > MAG_THRESHOLD)
+            if peak_found:
+                matched_peaks += 1
+
+        return matched_peaks >= len(SIREN_SIGNATURE_FREQS) // 2
 
     def run(self):
         emergency_start_time = None
@@ -50,35 +54,38 @@ class MicrophoneHandler:
             while True:
                 current_time = time.monotonic()
 
-                try:
-                    data = np.frombuffer(self.stream.read(self.SAMPLES, exception_on_overflow=False), dtype=np.int16)
+                # Read a frame from ALSA (non-blocking)
+                length, data = self.pcm.read()
+                if length > 0:
+                    chunk = np.frombuffer(data, dtype=np.int16)
+                    self.audio_buffer = np.concatenate((self.audio_buffer, chunk))
 
-                    # Check for emergency mode timeout
-                    with config.emergency_lock:
-                        if config.emergency_active:
-                            if emergency_start_time and current_time - emergency_start_time > 10:
-                                config.emergency_active = False
-                                logging.info("[MIC] Emergency cleared.")
-                                emergency_start_time = None
-                                allred_sent = False
-                            continue  # Skip detection during emergency
+                    # Only process once we have a full window
+                    if len(self.audio_buffer) >= self.SAMPLES:
+                        buffer_to_process = self.audio_buffer[:self.SAMPLES]
+                        self.audio_buffer = self.audio_buffer[self.SAMPLES:]  # keep remainder
 
-                    if self.detect_siren(data):
                         with config.emergency_lock:
-                            config.emergency_active = True
-                            emergency_start_time = current_time
+                            if config.emergency_active:
+                                if emergency_start_time and current_time - emergency_start_time > ARDUINO_ALL_RED_TIMEOUT:
+                                    config.emergency_active = False
+                                    logging.info("[MIC] Emergency cleared.")
+                                    emergency_start_time = None
+                                    allred_sent = False
+                                continue
 
-                        if not allred_sent:
-                            with config.write_lock:
-                                logging.info("[MIC] Siren detected. Sending AllRed.")
-                                self.serial_parser.write_command("AllRed")
-                                allred_sent = True
+                        if self.detect_siren(buffer_to_process):
+                            with config.emergency_lock:
+                                config.emergency_active = True
+                                emergency_start_time = current_time
 
-                except IOError as e:
-                    logging.error(f"[MIC] Audio error: {e}")
+                            if not allred_sent:
+                                with config.write_lock:
+                                    logging.info("[MIC] Siren detected. Sending AllRed.")
+                                    self.serial_parser.write_command("AllRed")
+                                    allred_sent = True
+
+                time.sleep(0.1)  # small sleep to yield CPU
+
         except KeyboardInterrupt:
             pass
-        finally:
-            self.stream.stop_stream()
-            self.stream.close()
-            self.p.terminate()

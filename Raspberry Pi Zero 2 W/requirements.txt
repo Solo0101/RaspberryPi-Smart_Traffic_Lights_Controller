@@ -1,6 +1,8 @@
 wheel
 numpy~=1.26.4
 PyAudio~=0.2.14
+pyalsaaudio
 scipy
 serial
+pyserial
 websockets
