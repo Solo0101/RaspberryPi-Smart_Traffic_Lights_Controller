@@ -1,5 +1,4 @@
 from MicrophoneHandler import MicrophoneHandler
-from APIHandler import APIHandler
 from WebSocketHandler import WebSocketHandler
 from SerialResponse import SerialResponse
 import utilities
