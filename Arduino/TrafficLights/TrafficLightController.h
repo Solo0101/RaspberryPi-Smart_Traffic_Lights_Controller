@@ -38,9 +38,9 @@ private:
   const unsigned long allRedTimeout = 10000;
 
   // Phase durations (ms)
-  unsigned long northSouthGreenTime = 5000;
+  unsigned long northSouthGreenTime = 42000;
   unsigned long northSouthYellowTime = 3000;
-  unsigned long eastWestGreenTime = 5000;
+  unsigned long eastWestGreenTime = 42000;
   unsigned long eastWestYellowTime = 3000;
 
 
