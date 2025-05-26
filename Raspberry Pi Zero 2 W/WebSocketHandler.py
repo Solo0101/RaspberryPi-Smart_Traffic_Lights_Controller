@@ -5,7 +5,7 @@ import websockets
 import time
 from SerialResponse import SerialResponse
 import config
-from constants import ARDUINO_COMMANDS
+from constants import ARDUINO_COMMANDS, ARDUINO_ACTIONS, ARDUINO_DIRECTIONS
 import base64
 
 class WebSocketHandler:
@@ -51,20 +51,37 @@ class WebSocketHandler:
                 response = await websocket.recv()
                 logging.info(f"[WS] Received: {response}")
                 command_data = json.loads(response)
-                command = command_data.get("action")
 
-                if command in ARDUINO_COMMANDS:
-                    with config.emergency_lock:
-                        if config.emergency_active:
-                            logging.info(f"[WS] Skipped backend command '{command}' due to emergency.")
-                            continue
-                    
-                    with config.write_lock:
-                        self.serial_parser.write_command(command)
-                elif command:
-                    logging.warning(f"[Responder] Invalid command: {command}")
+                action = command_data.get("action")
+                direction = command_data.get("direction")
+
+                if action is None:
+                    action = ""
+                    logging.warning("[WS] 'action' field is missing in message.")
+
+                if direction is None:
+                    direction = ""
+                    logging.warning("[WS] 'direction' field is missing in message.")
+
+                if action or direction:
+                    if action in ARDUINO_ACTIONS and direction in ARDUINO_DIRECTIONS:
+                        full_command = f"{action}{direction}"
+                        if full_command in ARDUINO_COMMANDS:
+                            with config.emergency_lock:
+                                if config.emergency_active:
+                                    logging.info(f"[WS] Skipped command '{full_command}' due to active emergency.")
+                                    continue
+
+                            with config.write_lock:
+                                self.serial_parser.write_command(full_command)
+                                logging.info(f"[WS] Sent command to Arduino: {full_command}")
+                    else:
+                        logging.warning(f"[WS] Invalid action or direction: {action} {direction}")
+                else:
+                    logging.warning("[WS] Missing 'action' and 'direction' fields in message.")
+
             except Exception as e:
-                logging.warning(f"[Responder] Receive or serial write error: {e}")
+                logging.warning(f"[Responder] Error: {e}")
 
     async def run_forever(self):
         while True:
