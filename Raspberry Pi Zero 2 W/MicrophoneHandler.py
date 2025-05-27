@@ -8,19 +8,41 @@ import config
 from constants import SIREN_SIGNATURE_FREQS, FREQ_TOLERANCE, MAG_THRESHOLD, ARDUINO_ALL_RED_TIMEOUT
 
 class MicrophoneHandler:
+    """
+        Handles audio sampling and police siren detection using FFT.
+    
+        Parameters:
+            serial_parser (SerialResponse): Parser for sending serial commands.
+            device_name (str): ALSA audio device identifier.
+    """
     SAMPLE_RATE = 44100
     SAMPLES = 2048
     CHANNELS = 1
     FORMAT = alsaaudio.PCM_FORMAT_S16_LE
-    PERIOD_SIZE = 1024  # smaller chunks are okay when buffering manually
+    PERIOD_SIZE = 1024
 
     def __init__(self, serial_parser: SerialResponse, device_name: str = "default"):
+        """
+            Initializes audio configuration and internal buffer.
+
+            Parameters:
+                serial_parser (SerialResponse): Serial communication handler.
+                device_name (str): ALSA audio device name.
+        """
+
         self.serial_parser = serial_parser
         self.device_name = device_name
         self.pcm = self.initialize_audio()
         self.audio_buffer = np.array([], dtype=np.int16)
 
-    def initialize_audio(self):
+    def initialize_audio(self) -> alsaaudio.PCM:
+        """
+            Sets up ALSA audio capture in non-blocking mode.
+
+            Returns:
+                alsaaudio.PCM: Configured ALSA PCM capture object.
+        """
+
         pcm = alsaaudio.PCM(type=alsaaudio.PCM_CAPTURE,
                             mode=alsaaudio.PCM_NONBLOCK,
                             channels=self.CHANNELS,
@@ -30,7 +52,17 @@ class MicrophoneHandler:
                             device=self.device_name)
         return pcm
 
-    def detect_siren(self, data):
+    def detect_siren(self, data: np.ndarray) -> bool:
+        """
+            Runs FFT on audio buffer and checks for police siren frequency pattern.
+
+            Parameters:
+                data (np.ndarray): Audio data for FFT analysis.
+
+            Returns:
+                bool: True if siren signature is detected, False otherwise.
+        """
+
         vReal = np.array(data, dtype=np.float32)
         vReal *= np.hamming(len(vReal))
 
@@ -47,6 +79,10 @@ class MicrophoneHandler:
         return matched_peaks >= len(SIREN_SIGNATURE_FREQS) // 2
 
     def run(self):
+        """
+            Continuously captures and processes audio. Sends emergency command if siren is detected.
+        """
+
         emergency_start_time = None
         allred_sent = False
 

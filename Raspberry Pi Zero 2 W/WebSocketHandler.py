@@ -9,7 +9,23 @@ from constants import ARDUINO_COMMANDS, ARDUINO_ACTIONS, ARDUINO_DIRECTIONS
 import base64
 
 class WebSocketHandler:
+    """
+        Handles bidirectional communication over a WebSocket with the backend server.
+
+        Parameters:
+            ws_url (str): WebSocket URL of the backend server.
+            serial_parser (SerialResponse): Parser object for serial communication with Arduino.
+    """
+
     def __init__(self, ws_url: str, serial_parser: SerialResponse):
+        """
+            Initializes the WebSocketHandler and prepares authentication headers.
+
+            Parameters:
+                ws_url (str): WebSocket endpoint.
+                serial_parser (SerialResponse): Instance to handle serial comms.
+        """
+
         self.ws_url = ws_url
         self.serial_parser = serial_parser
         self.read_interval = 1.0 # Read serial state every 1s
@@ -26,6 +42,13 @@ class WebSocketHandler:
         logging.info(f"[WebSocketHandler] Initialized for {ws_url}")
 
     async def reader_task(self, websocket):
+        """
+            Periodically reads from Arduino and sends updates to the WebSocket server if changed.
+
+            Parameters:
+                websocket: Active WebSocket connection.
+        """
+
         self.last_sent_state = None
 
         while True:
@@ -46,6 +69,12 @@ class WebSocketHandler:
             await asyncio.sleep(0.1)  # check frequently but only send if needed
 
     async def responder_task(self, websocket):
+        """
+            Handles incoming commands from the WebSocket server and sends them to the Arduino.
+
+            Parameters:
+                websocket: Active WebSocket connection.
+        """
         while True:
             try:
                 response = await websocket.recv()
@@ -84,6 +113,10 @@ class WebSocketHandler:
                 logging.warning(f"[Responder] Error: {e}")
 
     async def run_forever(self):
+        """
+            Maintains a persistent WebSocket connection and starts communication tasks.
+        """
+
         while True:
             try:
                 logging.info(f"[WS] Connecting to {self.ws_url}...")
@@ -101,6 +134,10 @@ class WebSocketHandler:
                 await asyncio.sleep(self.reconnect_interval)
 
     def run(self):
+        """
+            Starts the asyncio event loop for WebSocket communication.
+        """
+
         logging.info("[WebSocketHandler] Starting event loop...")
         asyncio.run(self.run_forever())
         logging.info("[WebSocketHandler] Event loop terminated.")

@@ -17,7 +17,7 @@ def main():
 
     print("\n>>> Serial test started.")
     print(">>> Press Ctrl+C to exit.")
-    print(">>> Every 3s, Raspberry sends 'Increase' to Arduino.")
+    print(">>> Every 3s, Raspberry sends 'IncreaseNS' to Arduino.")
 
     last_sent = time.monotonic()
 
@@ -31,7 +31,7 @@ def main():
             # Every 3 seconds, send a test command to Arduino
             if time.monotonic() - last_sent >= 3:
                 serial_handler.write_command(ARDUINO_COMMANDS[0])
-                logging.info("Sent 'Increase' command to Arduino.")
+                logging.info("Sent 'IncreaseNS' command to Arduino.")
                 last_sent = time.monotonic()
 
             time.sleep(0.1)

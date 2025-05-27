@@ -13,7 +13,7 @@ config.write_lock = threading.Lock()
 
 def run_client():
     handler = WebSocketHandler(
-        ws_url="ws://192.168.189.190:8765/", # Replace with actual ip address
+        ws_url="ws://smart-intersection.go.ro:80/ws/pi_comms", # Replace with actual ip address
         serial_device_path="/dev/ttyACM0"
     )
     handler.run()
