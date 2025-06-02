@@ -19,7 +19,7 @@ class MicrophoneHandler:
     SAMPLES = 2048
     CHANNELS = 1
     FORMAT = alsaaudio.PCM_FORMAT_S16_LE
-    PERIOD_SIZE = 1024
+    PERIOD_SIZE = 2048
 
     def __init__(self, serial_parser: SerialResponse, device_name: str = "default"):
         """
@@ -33,7 +33,6 @@ class MicrophoneHandler:
         self.serial_parser = serial_parser
         self.device_name = device_name
         self.pcm = self.initialize_audio()
-        self.audio_buffer = np.array([], dtype=np.int16)
 
     def initialize_audio(self) -> alsaaudio.PCM:
         """
@@ -44,7 +43,7 @@ class MicrophoneHandler:
         """
 
         pcm = alsaaudio.PCM(type=alsaaudio.PCM_CAPTURE,
-                            mode=alsaaudio.PCM_NONBLOCK,
+                            mode=alsaaudio.PCM_NORMAL,
                             channels=self.CHANNELS,
                             rate=self.SAMPLE_RATE,
                             format=self.FORMAT,
@@ -90,36 +89,29 @@ class MicrophoneHandler:
             while True:
                 current_time = time.monotonic()
 
-                # Read a frame from ALSA (non-blocking)
+                # Read a frame from ALSA (blocking)
                 length, data = self.pcm.read()
-                if length > 0:
-                    chunk = np.frombuffer(data, dtype=np.int16)
-                    self.audio_buffer = np.concatenate((self.audio_buffer, chunk))
+                audio = np.frombuffer(data, dtype=np.int16)
 
-                    # Only process once we have a full window
-                    if len(self.audio_buffer) >= self.SAMPLES:
-                        buffer_to_process = self.audio_buffer[:self.SAMPLES]
-                        self.audio_buffer = self.audio_buffer[self.SAMPLES:]  # keep remainder
+                with config.emergency_lock:
+                    if config.emergency_active:
+                        if emergency_start_time and current_time - emergency_start_time > ARDUINO_ALL_RED_TIMEOUT:
+                            config.emergency_active = False
+                            logging.info("[MIC] Emergency cleared.")
+                            emergency_start_time = None
+                            allred_sent = False
+                        continue
 
-                        with config.emergency_lock:
-                            if config.emergency_active:
-                                if emergency_start_time and current_time - emergency_start_time > ARDUINO_ALL_RED_TIMEOUT:
-                                    config.emergency_active = False
-                                    logging.info("[MIC] Emergency cleared.")
-                                    emergency_start_time = None
-                                    allred_sent = False
-                                continue
+                if self.detect_siren(audio):
+                    with config.emergency_lock:
+                        config.emergency_active = True
+                        emergency_start_time = current_time
 
-                        if self.detect_siren(buffer_to_process):
-                            with config.emergency_lock:
-                                config.emergency_active = True
-                                emergency_start_time = current_time
-
-                            if not allred_sent:
-                                with config.write_lock:
-                                    logging.info("[MIC] Siren detected. Sending AllRed.")
-                                    self.serial_parser.write_command("AllRed")
-                                    allred_sent = True
+                    if not allred_sent:
+                        with config.write_lock:
+                            logging.info("[MIC] Siren detected. Sending AllRed.")
+                            self.serial_parser.write_command("AllRed")
+                            allred_sent = True
 
                 time.sleep(0.1)  # small sleep to yield CPU
 
