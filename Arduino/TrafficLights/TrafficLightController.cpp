@@ -45,7 +45,7 @@ void TrafficLightController::update() {
 
     case NORTH_SOUTH_GREEN:
       if (emergencyActive) {
-        Serial.println("[FSM] Emergency detected -> switching to ALL_RED.");
+        Serial.println(F("[FSM] Emergency detected -> switching to ALL_RED."));
         transitionTo(ALL_RED);
         break;
       }
@@ -72,7 +72,7 @@ void TrafficLightController::update() {
 
     case EAST_WEST_GREEN:
       if (emergencyActive) {
-        Serial.println("[FSM] Emergency detected -> switching to ALL_RED.");
+        Serial.println(F("[FSM] Emergency detected -> switching to ALL_RED."));
         transitionTo(ALL_RED);
         break;
       }
@@ -96,11 +96,23 @@ void TrafficLightController::update() {
       if (now - allRedStartTime >= allRedTimeout) {
         if (emergencyActive) {
           emergencyActive = false;
-          Serial.println("[FSM] Emergency timeout expired. Resuming to NS_GREEN.");
+          Serial.println(F("[FSM] Emergency timeout expired. Resuming to previous state."));
           nsAdjusted = false;
           ewAdjusted = false;
-          transitionTo(NORTH_SOUTH_GREEN);
+          transitionTo(lastRegularState);
         }
+      }
+      break;
+
+    case ALL_YELLOW:
+      if (now - lastStateChange >= intermitentYellowTimeout) {
+        transitionTo(ALL_OFF);
+      }
+      break;
+
+    case ALL_OFF:
+      if (now - lastStateChange >= intermitentYellowTimeout && previousState == ALL_YELLOW) {
+        transitionTo(ALL_YELLOW);
       }
       break;
   }
@@ -118,6 +130,8 @@ void TrafficLightController::reportStatus() {
       case EAST_WEST_GREEN: report += "EAST_WEST_GREEN"; break;
       case EAST_WEST_YELLOW: report += "EAST_WEST_YELLOW"; break;
       case ALL_RED: report += "ALL_RED"; break;
+      case ALL_YELLOW: report += "ALL_YELLOW"; break;
+      case ALL_OFF: report += "ALL_OFF"; break;
     }
     report += ",NSG:" + String(northSouthGreenTime / milisecondsInSecond);
     report += ",NSY:" + String(northSouthYellowTime / milisecondsInSecond);
@@ -133,62 +147,76 @@ void TrafficLightController::handleSerialCommand(String command) {
   if (command == "AllRed") {
     if (!emergencyActive) {
       emergencyActive = true;
-      Serial.println("[FSM] Emergency mode activated -> switching to ALL_RED.");
+      Serial.println(F("[FSM] Emergency mode activated -> switching to ALL_RED."));
       transitionTo(ALL_RED);
       allRedStartTime = millis();  // Start timeout tracking
     } else {
-      Serial.println("[FSM] Emergency already active. Ignoring redundant AllRed.");
+      Serial.println(F("[FSM] Emergency already active. Ignoring redundant AllRed."));
     }
+  } else if (command == "HazardMode") {
+    Serial.println(F("[FSM] Entering hazard mode (ALL_YELLOW <-> ALL_OFF)."));
+    emergencyActive = false;
+    transitionTo(ALL_YELLOW);
+  } else if (command == "AllOff") {
+    Serial.println(F("[FSM] Entering ALL_OFF indefinite state."));
+    emergencyActive = false;
+    transitionTo(ALL_OFF);
   }
 
   else if (command == "Resume") {
     if (emergencyActive && currentState == ALL_RED) {
       emergencyActive = false;
-      Serial.println("[FSM] Emergency cleared. Resuming to NORTH_SOUTH_GREEN.");
-      transitionTo(NORTH_SOUTH_GREEN);
+      Serial.println(F("[FSM] Emergency cleared. Resuming to previous state."));
+      transitionTo(lastRegularState);
+    } else if (currentState == ALL_YELLOW || (currentState == ALL_OFF && previousState == ALL_YELLOW)) {
+      Serial.println(F("[FSM] HazardMode cleared. Resuming to previous state"));
+      transitionTo(lastRegularState);
+    } else if (currentState == ALL_OFF && previousState != ALL_YELLOW) {
+      Serial.println(F("[FSM] Turning on intersection. Resuming to previous state"));
+      transitionTo(lastRegularState);
     } else {
-      Serial.println("[FSM] Resume ignored.");
+      Serial.println(F("[FSM] Resume ignored."));
     }
   }
 
   else if (command == "JumpNSG") {
     if (currentState == NORTH_SOUTH_GREEN) {
-      Serial.println("[FSM] JumpNSG command ignored, already in NORTH_SOUTH_GREEN state");
+      Serial.println(F("[FSM] JumpNSG command ignored, already in NORTH_SOUTH_GREEN state"));
     } else {
       emergencyActive = false;
       nsAdjusted = false;
       ewAdjusted = false;
-      Serial.println("[FSM] Jumping to NORTH_SOUTH_GREEN.");
+      Serial.println(F("[FSM] Jumping to NORTH_SOUTH_GREEN."));
       transitionTo(NORTH_SOUTH_GREEN);
     }
   } else if (command == "JumpNSY") {
     if (currentState == NORTH_SOUTH_YELLOW) {
-      Serial.println("[FSM] JumpNSY command ignored, already in NORTH_SOUTH_YELLOW state");
+      Serial.println(F("[FSM] JumpNSY command ignored, already in NORTH_SOUTH_YELLOW state"));
     } else {
       emergencyActive = false;
       nsAdjusted = false;
       ewAdjusted = false;
-      Serial.println("[FSM] Jumping to NORTH_SOUTH_YELLOW.");
+      Serial.println(F("[FSM] Jumping to NORTH_SOUTH_YELLOW."));
       transitionTo(NORTH_SOUTH_YELLOW);
     }
   } else if (command == "JumpEWG") {
     if (currentState == EAST_WEST_GREEN) {
-      Serial.println("[FSM] JumpEWG command ignored, already in EAST_WEST_GREEN state");
+      Serial.println(F("[FSM] JumpEWG command ignored, already in EAST_WEST_GREEN state"));
     } else {
       emergencyActive = false;
       nsAdjusted = false;
       ewAdjusted = false;
-      Serial.println("[FSM] Jumping to EAST_WEST_GREEN.");
+      Serial.println(F("[FSM] Jumping to EAST_WEST_GREEN."));
       transitionTo(EAST_WEST_GREEN);
     }
   } else if (command == "JumpEWY") {
     if (currentState == EAST_WEST_YELLOW) {
-      Serial.println("[FSM] JumpEWY command ignored, already in EAST_WEST_YELLOW state");
+      Serial.println(F("[FSM] JumpEWY command ignored, already in EAST_WEST_YELLOW state"));
     } else {
       emergencyActive = false;
       nsAdjusted = false;
       ewAdjusted = false;
-      Serial.println("[FSM] Jumping to EAST_WEST_YELLOW.");
+      Serial.println(F("[FSM] Jumping to EAST_WEST_YELLOW."));
       transitionTo(EAST_WEST_YELLOW);
     }
   }
@@ -197,29 +225,35 @@ void TrafficLightController::handleSerialCommand(String command) {
     if (command == "IncreaseNS" && !nsAdjusted) {
       northSouthGreenTime = min(northSouthGreenTime + 1000, 60000);
       nsAdjusted = true;
-      Serial.println("[FSM] Increased NS_GREEN duration.");
+      Serial.println(F("[FSM] Increased NORTH_SOUTH_GREEN duration."));
     } else if (command == "DecreaseNS" && !nsAdjusted) {
       northSouthGreenTime = max(northSouthGreenTime - 1000, 10000);
       nsAdjusted = true;
-      Serial.println("[FSM] Decreased NS_GREEN duration.");
+      Serial.println(F("[FSM] Decreased NORTH_SOUTH_GREEN duration."));
     } else if (command == "IncreaseEW" && !ewAdjusted) {
       eastWestGreenTime = min(eastWestGreenTime + 1000, 60000);
       ewAdjusted = true;
-      Serial.println("[FSM] Increased EW_GREEN duration.");
+      Serial.println(F("[FSM] Increased EAST_WEST_GREEN duration."));
     } else if (command == "DecreaseEW" && !ewAdjusted) {
       eastWestGreenTime = max(eastWestGreenTime - 1000, 10000);
       ewAdjusted = true;
-      Serial.println("[FSM] Decreased EW_GREEN duration.");
+      Serial.println(F("[FSM] Decreased EAST_WEST_GREEN duration."));
     } else {
-      Serial.println("[FSM] Adjustment ignored (already applied).");
+      Serial.println(F("[FSM] Adjustment ignored (already applied or invalid context)."));
     }
   } else {
-    Serial.println("[FSM] Adjustment command ignored: in ALL_RED or sensor holding.");
+    Serial.println(F("[FSM] Adjustment command ignored: in ALL_RED or sensor holding."));
   }
 }
 
 void TrafficLightController::transitionTo(State nextState) {
   lastStateChange = millis();
+
+  if (nextState != ALL_RED && nextState != ALL_YELLOW && nextState != ALL_OFF) {
+    lastRegularState = nextState;  // Save last non-emergency state
+  }
+
+  previousState = currentState;
   currentState = nextState;
 
   switch (currentState) {
@@ -228,6 +262,8 @@ void TrafficLightController::transitionTo(State nextState) {
     case EAST_WEST_GREEN: setEastWestGreen(); break;
     case EAST_WEST_YELLOW: setEastWestYellow(); break;
     case ALL_RED: setAllRed(); break;
+    case ALL_YELLOW: setAllYellow(); break;
+    case ALL_OFF: setAllOff(); break;
   }
 }
 
@@ -314,4 +350,34 @@ void TrafficLightController::setAllRed() {
   digitalWrite(westGreen, LOW);
   digitalWrite(westYellow, LOW);
   digitalWrite(westRed, HIGH);
+}
+
+void TrafficLightController::setAllYellow() {
+  digitalWrite(northGreen, LOW);
+  digitalWrite(northYellow, HIGH);
+  digitalWrite(northRed, LOW);
+  digitalWrite(southGreen, LOW);
+  digitalWrite(southYellow, HIGH);
+  digitalWrite(southRed, LOW);
+  digitalWrite(eastGreen, LOW);
+  digitalWrite(eastYellow, HIGH);
+  digitalWrite(eastRed, LOW);
+  digitalWrite(westGreen, LOW);
+  digitalWrite(westYellow, HIGH);
+  digitalWrite(westRed, LOW);
+}
+
+void TrafficLightController::setAllOff() {
+  digitalWrite(northGreen, LOW);
+  digitalWrite(northYellow, LOW);
+  digitalWrite(northRed, LOW);
+  digitalWrite(southGreen, LOW);
+  digitalWrite(southYellow, LOW);
+  digitalWrite(southRed, LOW);
+  digitalWrite(eastGreen, LOW);
+  digitalWrite(eastYellow, LOW);
+  digitalWrite(eastRed, LOW);
+  digitalWrite(westGreen, LOW);
+  digitalWrite(westYellow, LOW);
+  digitalWrite(westRed, LOW);
 }

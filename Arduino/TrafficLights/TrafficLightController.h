@@ -17,7 +17,9 @@ public:
     NORTH_SOUTH_YELLOW,
     EAST_WEST_GREEN,
     EAST_WEST_YELLOW,
-    ALL_RED
+    ALL_RED,
+    ALL_YELLOW,
+    ALL_OFF
   };
 
 private:
@@ -32,10 +34,11 @@ private:
   unsigned long lastStateChange = 0;
   unsigned long lastReportTime = 0;
   unsigned long allRedStartTime = 0;
-  
-  const unsigned long reporTimeInterval = 1000;
-  const unsigned long milisecondsInSecond = 1000;
-  const unsigned long allRedTimeout = 10000;
+
+  static constexpr unsigned long reporTimeInterval = 1000;
+  static constexpr unsigned long milisecondsInSecond = 1000;
+  static constexpr unsigned long allRedTimeout = 10000;
+  static constexpr unsigned long intermitentYellowTimeout = 2000;
 
   // Phase durations (ms)
   unsigned long northSouthGreenTime = 42000;
@@ -52,6 +55,8 @@ private:
   bool nsAdjusted = false;
   bool ewAdjusted = false;
 
+  State lastRegularState = NORTH_SOUTH_GREEN;
+  State previousState;
 
   // Tramway management
   bool emergencyActive = false;
@@ -59,7 +64,7 @@ private:
 
   UltraSonicDistanceSensor* distanceSensorNorth = new UltraSonicDistanceSensor(15, 14);
   UltraSonicDistanceSensor* distanceSensorSouth = new UltraSonicDistanceSensor(17, 16);
-  const unsigned int distanceThreshold = 5;
+  static constexpr unsigned int distanceThreshold = 5;
 
   bool checkNorthSensor();
   bool checkSouthSensor();
@@ -72,6 +77,8 @@ private:
   void setEastWestGreen();
   void setEastWestYellow();
   void setAllRed();
+  void setAllYellow();
+  void setAllOff();
 };
 
 #endif

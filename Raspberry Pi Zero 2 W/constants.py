@@ -1,7 +1,7 @@
 # Constants for the traffic light control system
-ARDUINO_ACTIONS = ("Increase", "Decrease", "Jump", "AllRed", "Resume")
+ARDUINO_ACTIONS = ("Increase", "Decrease", "Jump", "AllRed", "Resume", "HazardMode", "AllOff")
 ARDUINO_DIRECTIONS = ("NS", "EW", "NSG", "NSY", "EWG", "EWY")
-ARDUINO_COMMANDS = ("IncreaseNS", "DecreaseNS", "IncreaseEW", "DecreaseEW", "JumpNSG", "JumpNSY", "JumpEWG", "JumpEWY", "AllRed", "Resume")
+ARDUINO_COMMANDS = ("IncreaseNS", "DecreaseNS", "IncreaseEW", "DecreaseEW", "JumpNSG", "JumpNSY", "JumpEWG", "JumpEWY", "AllRed", "Resume", "HazardMode", "AllOff")
 ARDUINO_ALL_RED_TIMEOUT = 10
 
 # Constants for audio processing
