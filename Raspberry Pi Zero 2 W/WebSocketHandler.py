@@ -33,6 +33,7 @@ class WebSocketHandler:
         self.last_sent_state = None
         self.username = "dani"
         self.password = "vdani"
+        self.hazard_mode = False
         credentials = f"{self.username}:{self.password}"
         encoded_credentials = base64.b64encode(credentials.encode()).decode()
 
@@ -55,6 +56,10 @@ class WebSocketHandler:
             try:
                 state = self.serial_parser.read_and_parse_state()
                 if state:
+                    # Add hazard mode if active
+                    if self.hazard_mode:
+                        state["STATE"] = "HAZARD_MODE"
+
                     state_str = json.dumps(state, sort_keys=True)
 
                     if state_str != self.last_sent_state:
@@ -96,6 +101,13 @@ class WebSocketHandler:
                     if action in ARDUINO_ACTIONS and direction in ARDUINO_DIRECTIONS:
                         full_command = f"{action}{direction}"
                         if full_command in ARDUINO_COMMANDS:
+                            
+                            if full_command == "HazardMode":
+                                logging.info("[WS] Hazard mode activated.")
+                                self.hazard_mode = True
+                            else:
+                                self.hazard_mode = False
+
                             with config.emergency_lock:
                                 if config.emergency_active:
                                     logging.info(f"[WS] Skipped command '{full_command}' due to active emergency.")
