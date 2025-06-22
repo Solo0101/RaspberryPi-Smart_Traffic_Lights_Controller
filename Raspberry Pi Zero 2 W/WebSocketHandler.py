@@ -98,10 +98,10 @@ class WebSocketHandler:
                     logging.warning("[WS] 'direction' field is missing in message.")
 
                 if action or direction:
-                    if action in ARDUINO_ACTIONS and direction in ARDUINO_DIRECTIONS:
+                    if action in ARDUINO_ACTIONS or direction in ARDUINO_DIRECTIONS:
                         full_command = f"{action}{direction}"
                         if full_command in ARDUINO_COMMANDS:
-                            
+
                             if full_command == "HazardMode":
                                 logging.info("[WS] Hazard mode activated.")
                                 self.hazard_mode = True
