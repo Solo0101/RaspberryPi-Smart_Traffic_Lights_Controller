@@ -93,6 +93,11 @@ class MicrophoneHandler:
                 length, data = self.pcm.read()
                 audio = np.frombuffer(data, dtype=np.int16)
 
+                # Either no data or data not processed fast enough (eg. length == -32)
+                # Jump to next iteration
+                if length <= 0:
+                    continue
+
                 with config.emergency_lock:
                     if config.emergency_active:
                         if emergency_start_time and current_time - emergency_start_time > ARDUINO_ALL_RED_TIMEOUT:
