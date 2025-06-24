@@ -1,15 +1,16 @@
-import serial
+import logging
 import subprocess
 
-def initialize_serial(serial_port, baud_rate):
-    ser = serial.Serial(serial_port, baud_rate, timeout=1)
-    ser.flush()
-    return ser
-
 def run_command(command):
+    """
+        Executes a shell command and prints its output.
+
+        Parameters:
+            command (str): Shell command to execute.
+    """
     try:
         result = subprocess.run(command, shell=True)
-        print(f"Command output: {result.stdout}")
-        print(f"Command errors: {result.stderr}")
+        logging.info(f"Command output: {result.stdout}")
+        logging.error(f"Command errors: {result.stderr}")
     except Exception as e:
-        print(f"An error occurred: {e}")
+        logging.error(f"An error occurred: {e}")

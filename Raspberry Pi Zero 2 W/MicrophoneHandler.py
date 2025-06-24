@@ -1,75 +1,124 @@
 import numpy as np
-import pyaudio
-from scipy.fft import fft
-import serial
+import alsaaudio
 import time
+import logging
 
+from SerialResponse import SerialResponse
 import config
+from constants import SIREN_SIGNATURE_FREQS, FREQ_TOLERANCE, MAG_THRESHOLD, ARDUINO_ALL_RED_TIMEOUT
 
 class MicrophoneHandler:
-    SAMPLE_RATE = 16000
-    SAMPLES = 128
-    BUFFER_SIZE = 128
-    THRESHOLD = 20000
+    """
+        Handles audio sampling and police siren detection using FFT.
+    
+        Parameters:
+            serial_parser (SerialResponse): Parser for sending serial commands.
+            device_name (str): ALSA audio device identifier.
+    """
+    SAMPLE_RATE = 44100
+    SAMPLES = 2048
+    CHANNELS = 1
+    FORMAT = alsaaudio.PCM_FORMAT_S16_LE
+    PERIOD_SIZE = 2048
 
-    def __init__(self, serial_device, device_index):
-        self.device_index = device_index
-        self.ser = serial_device
-        self.p = self.initialize_audio()
-        self.stream = self.open_audio_stream()
+    def __init__(self, serial_parser: SerialResponse, device_name: str = "default"):
+        """
+            Initializes audio configuration and internal buffer.
 
-    def initialize_audio(self):
-        p = pyaudio.PyAudio()
-        return p
+            Parameters:
+                serial_parser (SerialResponse): Serial communication handler.
+                device_name (str): ALSA audio device name.
+        """
 
-    def open_audio_stream(self):
-        stream = self.p.open(format=pyaudio.paInt16,
-                             channels=1,
-                             rate=self.SAMPLE_RATE,
-                             input=True,
-                             frames_per_buffer=self.BUFFER_SIZE,
-                             input_device_index=self.device_index)
-        return stream
+        self.serial_parser = serial_parser
+        self.device_name = device_name
+        self.pcm = self.initialize_audio()
 
-    def read_current_state(self):
-        if self.ser.in_waiting > 0:
-            with config.read_lock:
-                state = self.ser.readline().decode('utf-8').strip()
-                return state
-        return None
+    def initialize_audio(self) -> alsaaudio.PCM:
+        """
+            Sets up ALSA audio capture in non-blocking mode.
 
-    def detect_siren(self, data):
+            Returns:
+                alsaaudio.PCM: Configured ALSA PCM capture object.
+        """
+
+        pcm = alsaaudio.PCM(type=alsaaudio.PCM_CAPTURE,
+                            mode=alsaaudio.PCM_NORMAL,
+                            channels=self.CHANNELS,
+                            rate=self.SAMPLE_RATE,
+                            format=self.FORMAT,
+                            periodsize=self.PERIOD_SIZE,
+                            device=self.device_name)
+        return pcm
+
+    def detect_siren(self, data: np.ndarray) -> bool:
+        """
+            Runs FFT on audio buffer and checks for police siren frequency pattern.
+
+            Parameters:
+                data (np.ndarray): Audio data for FFT analysis.
+
+            Returns:
+                bool: True if siren signature is detected, False otherwise.
+        """
+
         vReal = np.array(data, dtype=np.float32)
-        fft_data = fft(vReal)
-        magnitudes = np.abs(fft_data)
+        vReal *= np.hamming(len(vReal))
 
-        freqs = np.fft.fftfreq(self.SAMPLES, 1/self.SAMPLE_RATE)
-        siren_detected = False
+        fft_data = np.abs(np.fft.rfft(vReal))
+        freqs = np.fft.rfftfreq(len(vReal), 1 / self.SAMPLE_RATE)
 
-        for i in range(self.SAMPLES // 2):
-            frequency = freqs[i]
-            if 600 <= frequency <= 2000 and magnitudes[i] > self.THRESHOLD:
-                siren_detected = True
-                break
+        matched_peaks = 0
+        for target_freq in SIREN_SIGNATURE_FREQS:
+            band = (freqs >= target_freq - FREQ_TOLERANCE) & (freqs <= target_freq + FREQ_TOLERANCE)
+            peak_found = np.any(fft_data[band] > MAG_THRESHOLD)
+            if peak_found:
+                matched_peaks += 1
 
-        return siren_detected
+        return matched_peaks >= len(SIREN_SIGNATURE_FREQS) // 2
 
     def run(self):
+        """
+            Continuously captures and processes audio. Sends emergency command if siren is detected.
+        """
+
+        emergency_start_time = None
+        allred_sent = False
+
         try:
             while True:
-                try:
-                    data = np.frombuffer(self.stream.read(self.SAMPLES, exception_on_overflow=False), dtype=np.int16)
+                current_time = time.monotonic()
 
-                    if self.detect_siren(data):
+                # Read a frame from ALSA (blocking)
+                length, data = self.pcm.read()
+                audio = np.frombuffer(data, dtype=np.int16)
+
+                # Either no data or data not processed fast enough (eg. length == -32)
+                # Jump to next iteration
+                if length <= 0:
+                    continue
+
+                with config.emergency_lock:
+                    if config.emergency_active:
+                        if emergency_start_time and current_time - emergency_start_time > ARDUINO_ALL_RED_TIMEOUT:
+                            config.emergency_active = False
+                            logging.info("[MIC] Emergency cleared.")
+                            emergency_start_time = None
+                            allred_sent = False
+                        continue
+
+                if self.detect_siren(audio):
+                    with config.emergency_lock:
+                        config.emergency_active = True
+                        emergency_start_time = current_time
+
+                    if not allred_sent:
                         with config.write_lock:
-                            print("Siren detected")
-                            self.ser.write(b"AllRed\n")
-                            time.sleep(3)
-                except IOError as e:
-                    print(f"Error recording: {e}")
+                            logging.info("[MIC] Siren detected. Sending AllRed.")
+                            self.serial_parser.write_command("AllRed")
+                            allred_sent = True
+
+                time.sleep(0.1)  # small sleep to yield CPU
+
         except KeyboardInterrupt:
             pass
-        finally:
-            self.stream.stop_stream()
-            self.stream.close()
-            self.p.terminate()
